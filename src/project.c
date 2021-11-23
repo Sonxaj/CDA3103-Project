@@ -21,7 +21,7 @@ void ALU(unsigned A,unsigned B,char ALUControl,unsigned *ALUresult,char *Zero)
         // set less than (signed)
         case 0x2:
             // int casting to accommodate for sign; ternary operator for simplicity
-            *ALUresult = ((int)A - (int)B) ? 1 : 0;
+            *ALUresult = ((int)A < (int)B) ? 1 : 0;
         break;
 
         // set less than (unsigned)
@@ -203,9 +203,7 @@ int instruction_decode(unsigned op,struct_controls *controls)
     // Set less than immediate unsigned (sltiu): 0000 1011
     case 0xb:
 
-        // Set ALU operation for 'set less than unsigned'
         controls->ALUOp = 0x3;
-
         controls->RegWrite = 0x1;
         controls->ALUSrc = 0x1;
     break;
@@ -250,7 +248,7 @@ void sign_extend(unsigned offset,unsigned *extended_value)
     // Fill upper half with 1s if constant is negative
 
     *extended_value = 
-        offset >> 15 == 1 ? (offset | 0xffff0000) : (offset & 0x0000ffff);     
+        (offset >> 15) == 1 ? (offset | 0xffff0000) : (offset & 0x0000ffff);     
 }
 
 /* ALU operations */
@@ -262,56 +260,52 @@ int ALU_operations(unsigned data1,unsigned data2,unsigned extended_value,unsigne
         return 1;
     }
     
-
     // convert ALUOp to unsigned int for simplicity
-    unsigned ALUOpCtrl = ALUOp;
+    unsigned ALUCtrl = ALUOp;
 
     // if R-Type, use funct field to determine instruction
-    if (ALUSrc == '0')
+    switch (funct)
     {
-        switch (funct)
-        {
-            // add
-            case 0x20:
-                ALUOpCtrl = '0';
-            break;
+        // add
+        case 0x20:
+            ALUCtrl = 0;
+        break;
 
-            // subtract
-            case 0x22:
-                ALUOpCtrl = '1';
-            break;
+        // subtract
+        case 0x22:
+            ALUCtrl = 0;
+        break;
 
-            // AND
-            case 0x24:
-                ALUOpCtrl = '4';
-            break;
+        // AND
+        case 0x24:
+            ALUCtrl = 4;
+        break;
 
-            // OR
-            case 0x25:
-                ALUOpCtrl = '5';
-            break;
+        // OR
+        case 0x25:
+            ALUCtrl = 5;
+        break;
 
-            // SLT
-            case 0x2a:
-                ALUOpCtrl = '2';
-            break;
-            
-            // SLTu
-            case 0x2b:
-                ALUOpCtrl = '3';
-            break;
+        // SLT
+        case 0x2a:
+            ALUCtrl = 2;
+        break;
+        
+        // SLTu
+        case 0x2b:
+            ALUCtrl = 3;
+        break;
 
-            // halt condition on invalid instruction
-            default:
-                return 1;
-        }
+        // halt condition on invalid instruction
+        default:
+            return 1;
     }
 
     // if source is asserted, so we use the extended offset and the ALUOp control signal
     unsigned data2extended = (ALUSrc ==  1) ? extended_value : data2;
 
     // perform operation
-    ALU(data1, data2extended, ALUOpCtrl, ALUresult, Zero);
+    ALU(data1, data2extended, ALUCtrl, ALUresult, Zero);
 
     // operation successful
     return 0;
@@ -322,16 +316,15 @@ int ALU_operations(unsigned data1,unsigned data2,unsigned extended_value,unsigne
 int rw_memory(unsigned ALUresult,unsigned data2,char MemWrite,char MemRead,unsigned *memdata,unsigned *Mem)
 {
     // ALUresult is a valid address if MemWrite/MemRead is asserted AND
-    // the address is divisible by 4 AND within acceptable ranges
+    // the address is divisible by 4
 
     // check for halt conditions
     if(MemRead == 1 || MemWrite == 1){
 
-        // halt if address is word aligned, or outside PC range
-        int halt = ((ALUresult % 4) != 0 || ALUresult < 0x0000 || ALUresult > 0xffff);
-        if(halt) return 1;
+        // halt if address is word aligned
+        if((ALUresult % 4) != 0) 
+            return 1;
     }
-
     
     // write value of data2 to mem location addressed by ALUresult
     if(MemWrite == 1){
@@ -388,10 +381,7 @@ void PC_update(unsigned jsec,unsigned extended_value,char Branch,char Jump,char 
     if(Jump == 1)
     {
         // PC = PC + 4[top 4 bits]
-
-        int temp = *PC & 0xf0000000;
-
-        *PC = temp | (jsec << 2);
+        *PC = *PC & 0xf0000000 | (jsec << 2);
     }
 }
 
